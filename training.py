@@ -9,6 +9,9 @@
     https://arxiv.org/abs/1811.11212 CVPR 2019.
     Script Author: Vandit Jain. Github:vandit15
 """
+import os.path
+import sys
+
 import imageio
 import numpy as np
 import torch
@@ -20,8 +23,8 @@ import torch.nn.functional as F
 
 class Trainer:
     def __init__(self, generator, discriminator, gen_optimizer, dis_optimizer,
-                 weight_rotation_loss_d, weight_rotation_loss_g, gp_weight=10, critic_iterations=5,
-                 print_every=50, use_cuda=False):
+                 weight_rotation_loss_d, weight_rotation_loss_g, gp_weight=10, critic_iterations=1,
+                 print_every=1, use_cuda=False, logger=None, opt=None):
         self.G = generator
         self.G_opt = gen_optimizer
         self.D = discriminator
@@ -34,6 +37,8 @@ class Trainer:
         self.print_every = print_every
         self.weight_rotation_loss_d = weight_rotation_loss_d
         self.weight_rotation_loss_g = weight_rotation_loss_g
+        self.logger = logger
+        self.opt = opt
 
         if self.use_cuda:
             self.G.cuda()
@@ -154,6 +159,8 @@ class Trainer:
             # Get generated data
             data = data
             batch_size = data.size()[0]
+            if batch_size == 1:
+                continue
             generated_data = self.sample_generator(batch_size)
 
             x = generated_data
@@ -170,7 +177,7 @@ class Trainer:
 
             self.num_steps += 1
             self._critic_train_iteration(data, generated_data, batch_size)
-            # Only update generator every |critic_iterations| iterations
+            # Only update self.G every |critic_iterations| iterations
             if self.num_steps % self.critic_iterations == 0:
                 self._generator_train_iteration(generated_data, batch_size)
 
@@ -183,6 +190,37 @@ class Trainer:
                     print("G: {}".format(self.losses['G'][-1]))
 
     def train(self, data_loader, epochs, save_training_gif=True):
+
+        if self.opt.pretrained_models is not None:
+            try:
+                self.G.load_state_dict(
+                    torch.load(os.path.join(self.opt.log_dir, 'checkpoints', 'generators',
+                                            f'model_{self.opt.pretrained_models}.pt')))
+                self.G.train()
+                self.G_opt.load_state_dict(
+                    torch.load(os.path.join(self.opt.log_dir, 'checkpoints', 'generators',
+                                            f'optimizer_{self.opt.pretrained_models}.pt')))
+                self.D.load_state_dict(
+                    torch.load(os.path.join(self.opt.log_dir, 'checkpoints', 'discriminators',
+                                            f'model_{self.opt.pretrained_models}.pt')))
+                self.D.train()
+                self.D_opt.load_state_dict(
+                    torch.load(os.path.join(self.opt.log_dir, 'checkpoints', 'discriminators',
+                                            f'optimizer_{self.opt.pretrained_models}.pt')))
+                start_point = self.opt.pretrained_models
+            except:
+                print("Pretrained models was not found!")
+                sys.exit()
+        else:
+            start_point = 0
+
+        if self.G_opt.param_groups[0]['lr'] != self.opt.lr:
+            for g in self.G_opt.param_groups:
+                g['lr'] = self.opt.lr
+        if self.D_opt.param_groups[0]['lr'] != self.opt.lr:
+            for g in self.D_opt.param_groups:
+                g['lr'] = self.opt.lr
+
         if save_training_gif:
             # Fix latents to see how image generation improves during training
             fixed_latents = Variable(self.G.sample_latent(64))
@@ -190,9 +228,25 @@ class Trainer:
                 fixed_latents = fixed_latents.cuda()
             training_progress_images = []
 
-        for epoch in range(epochs):
-            print("\nEpoch {}".format(epoch + 1))
+        for epoch in range(start_point + 1, start_point + self.opt.n_epochs + 1):
+            print("\nEpoch {}".format(epoch))
             self._train_epoch(data_loader)
+
+            self.logger.add_scalar("Generator loss", self.losses['G'][-1], epoch)
+            self.logger.add_scalar("Discriminator loss", self.losses['D'][-1], epoch)
+            self.logger.flush()
+
+            with open(os.path.join(self.opt.log_dir, 'metrics', 'logs.txt'), 'a') as f:
+                f.write(f"{epoch} {self.losses['D'][-1]} {self.losses['D'][-1]}\n")
+
+            torch.save(self.G.state_dict(),
+                       os.path.join(self.opt.log_dir, 'checkpoints', 'generators', f'model_{epoch}.pt'))
+            torch.save(self.G_opt.state_dict(),
+                       os.path.join(self.opt.log_dir, 'checkpoints', 'generators', f'optimizer_{epoch}.pt'))
+            torch.save(self.D.state_dict(),
+                       os.path.join(self.opt.log_dir, 'checkpoints', 'discriminators', f'model_{epoch}.pt'))
+            torch.save(self.D_opt.state_dict(),
+                       os.path.join(self.opt.log_dir, 'checkpoints', 'discriminators', f'optimizer_{epoch}.pt'))
 
             if save_training_gif:
                 # Generate batch of images and convert to grid
@@ -203,9 +257,11 @@ class Trainer:
                 # Add image grid to training progress
                 training_progress_images.append(img_grid)
 
-        if save_training_gif:
-            imageio.mimsave('./training_{}_epochs.gif'.format(epochs),
-                            training_progress_images)
+                if epoch % self.opt.sample_interval == 0:
+                    imageio.mimsave(os.path.join(self.opt.log_dir, 'images', '{}.gif'.format(epochs)),
+                                    training_progress_images)
+
+        self.logger.close()
 
     def sample_generator(self, num_samples):
         latent_samples = Variable(self.G.sample_latent(num_samples))
