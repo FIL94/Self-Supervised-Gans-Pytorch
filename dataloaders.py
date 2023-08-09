@@ -1,21 +1,36 @@
-"""
-    Pytorch implementation of Self-Supervised GAN
-    Reference: "Self-Supervised GANs via Auxiliary Rotation Loss"
-    Authors: Ting Chen,
-                Xiaohua Zhai,
-                Marvin Ritter,
-                Mario Lucic and
-                Neil Houlsby
-    https://arxiv.org/abs/1811.11212 CVPR 2019.
-    Script Author: Vandit Jain. Github:vandit15
-"""
+import os
+
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 from torchvision import datasets, transforms
+from torchvision.io import read_image
 from torch.utils.data import Dataset
 import torchvision.transforms.functional as TF
 import random
 from typing import Sequence
+
+
+class GirlsDataset(Dataset):
+    def __init__(self, path):
+        self.path = path
+        self.images = os.listdir(path)
+        self.transform = transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
+
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, item):
+        return self.transform(read_image(os.path.join(self.path, self.images[item])).div(torch.tensor([255])))
+
+
+def get_girls_dataloader(path, batch_size=10):
+
+    girlsDataset = GirlsDataset(path)
+
+    girlsDataloader = DataLoader(girlsDataset, batch_size=batch_size, shuffle=True)
+
+    return girlsDataloader
+
 
 def get_mnist_dataloaders(batch_size=128):
     """MNIST dataloader with (32, 32) sized images."""
@@ -33,6 +48,7 @@ def get_mnist_dataloaders(batch_size=128):
     train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=True)
     return train_loader, test_loader
+
 
 def get_fashion_mnist_dataloaders(batch_size=128):
     """Fashion MNIST dataloader with (32, 32) sized images."""

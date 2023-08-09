@@ -12,16 +12,16 @@
 import imageio
 import numpy as np
 import torch
-import torch.nn as nn
 from torchvision.utils import make_grid
 from torch.autograd import Variable
 from torch.autograd import grad as torch_grad
 import torch.nn.functional as F
 
-class Trainer():
+
+class Trainer:
     def __init__(self, generator, discriminator, gen_optimizer, dis_optimizer,
-                 weight_rotation_loss_d, weight_rotation_loss_g, gp_weight=10, critic_iterations=5, print_every=50,
-                 use_cuda=False):
+                 weight_rotation_loss_d, weight_rotation_loss_g, gp_weight=10, critic_iterations=5,
+                 print_every=50, use_cuda=False):
         self.G = generator
         self.G_opt = gen_optimizer
         self.D = discriminator
@@ -55,23 +55,23 @@ class Trainer():
         # Create total loss and optimize
         self.D_opt.zero_grad()
         d_loss = torch.sum(g_fake_pro_logits) - torch.sum(d_real_pro_logits) + gradient_penalty
-        
-        # Add auxiiary rotation loss
-        rot_labels = torch.zeros(4*batch_size).cuda()
-        for i in range(4*batch_size):
+
+        # Add auxiliary rotation loss
+        rot_labels = torch.zeros(4 * batch_size).cuda()
+        for i in range(4 * batch_size):
             if i < batch_size:
                 rot_labels[i] = 0
-            elif i < 2*batch_size:
+            elif i < 2 * batch_size:
                 rot_labels[i] = 1
-            elif i < 3*batch_size:
+            elif i < 3 * batch_size:
                 rot_labels[i] = 2
             else:
                 rot_labels[i] = 3
-        
+
         rot_labels = F.one_hot(rot_labels.to(torch.int64), 4).float()
         d_real_class_loss = torch.sum(F.binary_cross_entropy_with_logits(
-                                    input = d_real_rot_logits,
-                                    target = rot_labels))
+            input=d_real_rot_logits.repeat(4, 1),
+            target=rot_labels))
 
         d_loss += self.weight_rotation_loss_d * d_real_class_loss
         d_loss.backward(retain_graph=True)
@@ -90,22 +90,21 @@ class Trainer():
         g_loss = - torch.sum(g_fake_pro_logits)
 
         # add auxiliary rotation loss
-        rot_labels = torch.zeros(4*batch_size,).cuda()
-        for i in range(4*batch_size):
+        rot_labels = torch.zeros(4 * batch_size, ).cuda()
+        for i in range(4 * batch_size):
             if i < batch_size:
                 rot_labels[i] = 0
-            elif i < 2*batch_size:
+            elif i < 2 * batch_size:
                 rot_labels[i] = 1
-            elif i < 3*batch_size:
+            elif i < 3 * batch_size:
                 rot_labels[i] = 2
             else:
                 rot_labels[i] = 3
-        
+
         rot_labels = F.one_hot(rot_labels.to(torch.int64), 4).float()
         g_fake_class_loss = torch.sum(F.binary_cross_entropy_with_logits(
-            input = g_fake_rot_logits, 
-            target = rot_labels))
-        
+            input=g_fake_rot_logits.repeat(4, 1),
+            target=rot_labels))
 
         g_loss += self.weight_rotation_loss_g * g_fake_class_loss
 
@@ -133,8 +132,9 @@ class Trainer():
 
         # Calculate gradients of probabilities with respect to examples
         gradients = torch_grad(outputs=prob_interpolated, inputs=interpolated,
-                               grad_outputs=torch.ones(prob_interpolated.size()).cuda() if self.use_cuda else torch.ones(
-                               prob_interpolated.size()),
+                               grad_outputs=torch.ones(
+                                   prob_interpolated.size()).cuda() if self.use_cuda else torch.ones(
+                                   prob_interpolated.size()),
                                create_graph=True, retain_graph=True)[0]
 
         # Gradients have shape (batch_size, num_channels, img_width, img_height),
@@ -152,21 +152,21 @@ class Trainer():
     def _train_epoch(self, data_loader):
         for i, data in enumerate(data_loader):
             # Get generated data
-            data = data[0]
+            data = data
             batch_size = data.size()[0]
             generated_data = self.sample_generator(batch_size)
-            
+
             x = generated_data
-            x_90 = x.transpose(2,3)
-            x_180 = x.flip(2,3)
-            x_270 = x.transpose(2,3).flip(2,3)
-            generated_data = torch.cat((x, x_90, x_180, x_270),0)
+            x_90 = x.transpose(-2, -1)
+            x_180 = x.flip(-2, -1)
+            x_270 = x.transpose(-2, -1).flip(-1, -2)
+            generated_data = torch.cat((x, x_90, x_180, x_270), 1)
 
             x = data
-            x_90 = x.transpose(2,3)
-            x_180 = x.flip(2,3)
-            x_270 = x.transpose(2,3).flip(2,3)
-            data = torch.cat((x,x_90,x_180,x_270),0)
+            x_90 = x.transpose(-2, -1)
+            x_180 = x.flip(-2, -1)
+            x_270 = x.transpose(-2, -1).flip(-1, -2)
+            data = torch.cat((x, x_90, x_180, x_270), 1)
 
             self.num_steps += 1
             self._critic_train_iteration(data, generated_data, batch_size)

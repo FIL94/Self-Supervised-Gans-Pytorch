@@ -14,6 +14,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 
+
 class SpectralNorm:
     def __init__(self, name):
         self.name = name
@@ -55,24 +56,25 @@ class SpectralNorm:
         setattr(module, self.name, weight_sn)
         setattr(module, self.name + '_u', u)
 
+
 def spectral_norm(module, name='weight'):
     SpectralNorm.apply(module, name)
 
     return module
 
 
-def log_sum_exp(x, axis = 1):
-    m = torch.max(x, keepdim = True)
-    return m + torch.logsumexp(x - m, dim = 1, keepdim = True)
+def log_sum_exp(x, axis=1):
+    m = torch.max(x, keepdim=True)
+    return m + torch.logsumexp(x - m, dim=1, keepdim=True)
 
 
 class conv2d(nn.Module):
-    def __init__(self, in_channels, out_channels, padding, kernel_size = 4, stride = 2,
-                spectral_normed = False):
+    def __init__(self, in_channels, out_channels, padding, kernel_size=4, stride=2,
+                 spectral_normed=False):
         super(conv2d, self).__init__()
 
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, 
-                                padding = padding)
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride,
+                              padding=padding)
         if spectral_normed:
             self.conv = spectral_norm(self.conv)
 
@@ -82,39 +84,39 @@ class conv2d(nn.Module):
 
 
 class deconv2d(nn.Module):
-    def __init__(self, in_channels, out_channels, padding, kernel_size = (4,4), stride = (2,2),
-                spectral_normed = False, iter = 1):
+    def __init__(self, in_channels, out_channels, padding, kernel_size=(4, 4), stride=(2, 2),
+                 spectral_normed=False, iter=1):
         super(deconv2d, self).__init__()
 
-        self.devconv = nn.ConvTranspose2d(in_channels, out_channels, kernel_size, 
-                        stride, padding = padding)
+        self.devconv = nn.ConvTranspose2d(in_channels, out_channels, kernel_size,
+                                          stride, padding=padding)
         if spectral_normed:
             self.devconv = spectral_norm(self.deconv)
 
     def forward(self, input):
         out = self.devconv(input)
-        return out    
+        return out
 
 
 def conv_cond_concat(x, y):
     x_shapes = list(x.size())
     y_shapes = list(y.size())
-    return torch.cat((x,y*torch,ones(x_shapes[0],x_shapes[1],x_shapes[2],y_shapes[3])))
+    return torch.cat((x, y * torch.ones(x_shapes[0], x_shapes[1], x_shapes[2], y_shapes[3])))
 
 
 class Residual_G(nn.Module):
-    def __init__(self, in_channels, out_channels = 256, kernel_size = 3, stride = 1, 
-                spectral_normed = False, up_sampling = False):
+    def __init__(self, in_channels, out_channels=256, kernel_size=3, stride=1,
+                 spectral_normed=False, up_sampling=False):
         super(Residual_G, self).__init__()
         self.up_sampling = up_sampling
         self.relu = nn.ReLU()
         self.batch_norm1 = nn.BatchNorm2d(in_channels)
         self.batch_norm2 = nn.BatchNorm2d(out_channels)
-        self.upsample = nn.Upsample(scale_factor = 2, mode = 'nearest')
-        self.conv1 = conv2d(in_channels, out_channels, spectral_normed = spectral_normed,
-                            kernel_size = kernel_size, stride = stride, padding = 1)
-        self.conv2 = conv2d(out_channels, out_channels, spectral_normed= spectral_normed, 
-                            kernel_size = kernel_size, stride = stride, padding = 1)
+        self.upsample = nn.Upsample(scale_factor=2, mode='nearest')
+        self.conv1 = conv2d(in_channels, out_channels, spectral_normed=spectral_normed,
+                            kernel_size=kernel_size, stride=stride, padding=1)
+        self.conv2 = conv2d(out_channels, out_channels, spectral_normed=spectral_normed,
+                            kernel_size=kernel_size, stride=stride, padding=1)
 
     def forward(self, x):
         input = x
@@ -131,20 +133,20 @@ class Residual_G(nn.Module):
 
 
 class Residual_D(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel = 3, stride = 1,
-                spectral_normed = False, down_sampling = False, is_start = False):
+    def __init__(self, in_channels, out_channels, kernel=3, stride=1,
+                 spectral_normed=False, down_sampling=False, is_start=False):
         super(Residual_D, self).__init__()
         self.down_sampling = down_sampling
         self.is_start = is_start
 
-        self.avgpool_short = nn.AvgPool2d(2, 2, padding = 1)
-        self.conv_short = conv2d(in_channels, out_channels, kernel_size = 1, stride = 1, padding = 0,
-                                spectral_normed = False)
-        self.conv1 = conv2d(in_channels, out_channels, spectral_normed = spectral_normed,
-                            kernel_size = kernel, stride = stride, padding = 1)
-        self.conv2 = conv2d(out_channels, out_channels, spectral_normed = spectral_normed,
-                            kernel_size = kernel, stride = stride, padding = 1)
-        self.avgpool2 = nn.AvgPool2d(2, 2, padding = 1)
+        self.avgpool_short = nn.AvgPool2d(2, 2, padding=1)
+        self.conv_short = conv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=0,
+                                 spectral_normed=False)
+        self.conv1 = conv2d(in_channels, out_channels, spectral_normed=spectral_normed,
+                            kernel_size=kernel, stride=stride, padding=1)
+        self.conv2 = conv2d(out_channels, out_channels, spectral_normed=spectral_normed,
+                            kernel_size=kernel, stride=stride, padding=1)
+        self.avgpool2 = nn.AvgPool2d(2, 2, padding=1)
         self.relu = nn.ReLU()
 
     def forward(self, x):
@@ -165,4 +167,3 @@ class Residual_D(nn.Module):
         resi = self.conv_short(input)
 
         return resi + conv2
-
