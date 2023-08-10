@@ -255,10 +255,10 @@ class Trainer:
                 # i.e. (width, height, channels)
                 img_grid = np.transpose(img_grid.numpy(), (1, 2, 0))
                 # Add image grid to training progress
-                training_progress_images.append(img_grid)
+                training_progress_images.append((img_grid*255).astype(np.uint8))
 
                 if epoch % self.opt.sample_interval == 0:
-                    imageio.mimsave(os.path.join(self.opt.log_dir, 'images', '{}.gif'.format(epochs)),
+                    imageio.mimsave(os.path.join(self.opt.log_dir, 'images', '{}.gif'.format(epoch)),
                                     training_progress_images)
 
         self.logger.close()

@@ -1,6 +1,5 @@
 import argparse
 import os
-import sys
 from datetime import datetime
 import torch
 import torch.optim as optim
@@ -13,8 +12,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument("path", type=str, help="path to folder containing images")
 parser.add_argument("--log_dir", type=str, default=os.getcwd(), help="directory to save results")
 parser.add_argument("--pretrained_models", type=int, default=None, help="number epoch for loading models")
-parser.add_argument("--n_epochs", type=int, default=5, help="number of epochs of training")
-parser.add_argument("--batch_size", type=int, default=10, help="size of the batches")
+parser.add_argument("--n_epochs", type=int, default=10, help="number of epochs of training")
+parser.add_argument("--batch_size", type=int, default=16, help="size of the batches")
 parser.add_argument("--lr", type=float, default=0.0001, help="adam: learning rate")
 parser.add_argument("--b1", type=float, default=0.9, help="adam: decay of first order momentum of gradient")
 parser.add_argument("--b2", type=float, default=0.99, help="adam: decay of first order momentum of gradient")

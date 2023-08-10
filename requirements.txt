@@ -1,6 +1,6 @@
 absl-py==1.4.0
 cachetools==5.3.1
-certifi==2023.7.22
+# certifi==2023.7.22
 charset-normalizer==3.2.0
 filelock==3.9.0
 google-auth==2.22.0
